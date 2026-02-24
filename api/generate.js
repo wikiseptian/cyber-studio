@@ -3,38 +3,42 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { prompt, image } = req.body;
-  const apiKey = process.env.GEMINI_API_KEY;
+  const { prompt } = req.body; // image optional, tidak dipakai di contoh ini
+  const apiKey = process.env.HUGGINGFACE_API_KEY;
 
   if (!apiKey) {
-    return res.status(500).json({ error: "API Key GEMINI_API_KEY belum dikonfigurasi di Vercel." });
+    return res.status(500).json({ error: "API Key HUGGINGFACE_API_KEY belum dikonfigurasi di Vercel." });
   }
 
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      "https://api-inference.huggingface.co/models/stable-diffusion-v1-5",
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              { text: prompt },
-              ...(image ? [{ inlineData: { mimeType: "image/jpeg", data: image } }] : [])
-            ]
-          }]
-        }),
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ inputs: prompt })
       }
     );
 
-    const data = await response.json();
-    if (data.error) {
-      return res.status(500).json({ error: data.error.message });
+    if (!response.ok) {
+      const err = await response.json();
+      return res.status(500).json({ error: err.error || "Terjadi kesalahan dari HuggingFace API." });
     }
 
+    const data = await response.json();
+
+    // Beberapa model HuggingFace mengembalikan base64 image di data[0].generated_image
+    // Sesuaikan jika format berbeda
     res.status(200).json(data);
 
   } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Terjadi kesalahan pada server AI." });
+  }
+}  } catch (error) {
     res.status(500).json({ error: "Terjadi kesalahan pada server AI." });
   }
 }
