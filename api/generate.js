@@ -1,44 +1,38 @@
+// File ini berjalan di Server Vercel menggunakan API Hugging Face
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { prompt } = req.body; // image optional, tidak dipakai di contoh ini
-  const apiKey = process.env.HUGGINGFACE_API_KEY;
+  const { prompt } = req.body;
+  
+  // Menggunakan HF_TOKEN dari Environment Variables Vercel
+  const hfToken = process.env.HF_TOKEN;
 
-  if (!apiKey) {
-    return res.status(500).json({ error: "API Key HUGGINGFACE_API_KEY belum dikonfigurasi di Vercel." });
+  if (!hfToken) {
+    return res.status(500).json({ error: "Token HF_TOKEN tidak ditemukan di Vercel." });
   }
 
   try {
+    // Kita gunakan model Mistral-7B-Instruct yang sangat pintar membuat skrip
     const response = await fetch(
-      "https://api-inference.huggingface.co/models/stable-diffusion-v1-5",
+      "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2",
       {
+        headers: { Authorization: `Bearer ${hfToken}`, "Content-Type": "application/json" },
         method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ inputs: prompt })
+        body: JSON.stringify({
+          inputs: `<s>[INST] Kamu adalah pakar marketing digital. ${prompt} Berikan skrip iklan pendek yang sangat menarik dalam 4 baris saja. [/INST]`,
+          parameters: { max_new_tokens: 250, temperature: 0.7 }
+        }),
       }
     );
 
-    if (!response.ok) {
-      const err = await response.json();
-      return res.status(500).json({ error: err.error || "Terjadi kesalahan dari HuggingFace API." });
-    }
+    const result = await response.json();
+    
+    // Hugging Face mengembalikan array, kita ambil teks pertama
+    const generatedText = result[0]?.generated_text?.split('[/INST]')[1]?.trim() || "Gagal membuat skrip.";
 
-    const data = await response.json();
-
-    // Beberapa model HuggingFace mengembalikan base64 image di data[0].generated_image
-    // Sesuaikan jika format berbeda
-    res.status(200).json(data);
+    res.status(200).json({ generated_text: generatedText });
 
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Terjadi kesalahan pada server AI." });
-  }
-}  } catch (error) {
-    res.status(500).json({ error: "Terjadi kesalahan pada server AI." });
+    res.status(500).json({ error: "Gagal menghubungi server Hugging Face." });
   }
 }
